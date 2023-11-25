@@ -2,9 +2,7 @@
 #[global_allocator]
 static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-use dprint_core::configuration::{
-    resolve_global_config, ConfigKeyMap, ConfigKeyValue, ResolveGlobalConfigOptions,
-};
+use dprint_core::configuration::{resolve_global_config, ConfigKeyMap, ConfigKeyValue};
 use dprint_plugin_typescript::{
     configuration::{resolve_config, ConfigurationBuilder},
     format_text,
@@ -52,11 +50,7 @@ fn format(file_name: String, code: String, config: Option<JsObject>) -> Result<S
 
                 c.insert(k, v);
             }
-            let res = resolve_config(
-                c,
-                &resolve_global_config(ConfigKeyMap::new(), &ResolveGlobalConfigOptions::default())
-                    .config,
-            );
+            let res = resolve_config(c, &resolve_global_config(&mut ConfigKeyMap::new()).config);
             if !res.diagnostics.is_empty() {
                 let message = res
                     .diagnostics
@@ -75,6 +69,77 @@ fn format(file_name: String, code: String, config: Option<JsObject>) -> Result<S
     };
 
     match format_text(&path, &code, &config) {
+        Ok(res) => Ok(res.unwrap_or(code)),
+        Err(e) => Err(napi::Error::new(
+            napi::Status::GenericFailure,
+            e.to_string(),
+        )),
+    }
+}
+
+#[napi]
+pub fn format_markdown(code: String, config: Option<JsObject>) -> Result<String> {
+    let config = match config {
+        Some(obj) => {
+            let mut c = ConfigKeyMap::new();
+            c.insert("deno".into(), ConfigKeyValue::Bool(true));
+
+            let properties = obj.get_property_names()?;
+            let len = properties
+                .get_named_property::<JsNumber>("length")?
+                .get_uint32()?;
+            for i in 0..len {
+                let property = properties.get_element::<JsString>(i)?;
+                let property_str = property.into_utf8()?;
+                let k = property_str.into_owned()?;
+                let value: JsUnknown = obj.get_property(property)?;
+                let v = match value.get_type()? {
+                    ValueType::String => {
+                        let s = unsafe { value.cast::<JsString>() }.into_utf8()?;
+                        ConfigKeyValue::String(s.into_owned()?)
+                    }
+                    ValueType::Number => {
+                        ConfigKeyValue::Number(unsafe { value.cast::<JsNumber>() }.get_int32()?)
+                    }
+                    ValueType::Boolean => {
+                        ConfigKeyValue::Bool(unsafe { value.cast::<JsBoolean>() }.get_value()?)
+                    }
+                    _ => {
+                        return Err(napi::Error::new(
+                            napi::Status::InvalidArg,
+                            format!("Unsupported type for configuration property {}", k),
+                        ))
+                    }
+                };
+
+                c.insert(k, v);
+            }
+            let res = dprint_plugin_markdown::configuration::resolve_config(
+                c,
+                &resolve_global_config(&mut ConfigKeyMap::new()).config,
+            );
+            if !res.diagnostics.is_empty() {
+                let message = res
+                    .diagnostics
+                    .iter()
+                    .map(|d| d.message.clone())
+                    .collect::<Vec<String>>()
+                    .join("\n  ");
+                return Err(napi::Error::new(
+                    napi::Status::InvalidArg,
+                    format!("Invalid configuration.\n  {}", message),
+                ));
+            }
+            res.config
+        }
+        _ => dprint_plugin_markdown::configuration::ConfigurationBuilder::new()
+            .deno()
+            .build(),
+    };
+
+    // TODO: support formatting code blocks
+    match dprint_plugin_markdown::format_text(&code, &config, |_tag, _file_text, _line_width| Ok(None))
+    {
         Ok(res) => Ok(res.unwrap_or(code)),
         Err(e) => Err(napi::Error::new(
             napi::Status::GenericFailure,
