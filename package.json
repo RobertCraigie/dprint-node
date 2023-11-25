@@ -1,5 +1,5 @@
 {
-  "name": "dprint-node",
+  "name": "@stainless-api/dprint-node",
   "version": "1.0.9",
   "description": "A node API for the dprint TypeScript and JavaScript code formatter",
   "repository": "https://github.com/devongovett/dprint-node",
