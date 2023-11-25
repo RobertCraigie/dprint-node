@@ -1,9 +1,9 @@
 {
-  "name": "@stainless-api/dprint-node",
-  "version": "1.0.9",
+  "name": "stainless-dprint-node",
+  "version": "1.0.10",
   "description": "A node API for the dprint TypeScript and JavaScript code formatter",
-  "repository": "https://github.com/devongovett/dprint-node",
-  "author": "Devon Govett <devongovett@gmail.com>",
+  "repository": "https://github.com/RobertCraigie/dprint-node",
+  "author": "Robert Craigie <robert@stainlessapi.com>",
   "license": "MIT",
   "napi": {
     "name": "dprint-node"
